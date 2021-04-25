@@ -1,6 +1,6 @@
 [Unit]
 Description=Ikea Tradfri MQTT interface for Home Logic
-After=syslog.target network.target mosquitto.target
+After=syslog.target network.target
 
 [Service]
 Type=simple
