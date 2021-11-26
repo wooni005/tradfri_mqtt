@@ -478,7 +478,7 @@ while not exit:
     if not exit:
         # Check observers
         for deviceName in observers:
-            if not observers[deviceName].isAlive():
+            if not observers[deviceName].is_alive():
                 print('Restart observer for %s:' % deviceName)
                 serviceReport.sendFailureToHomeLogic(serviceReport.ACTION_NOTHING, 'Observer restarted for: %s' % deviceName)
                 # If there are more than one lightDevices in a deviceName, monitor only the first one
