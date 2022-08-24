@@ -4,6 +4,7 @@ import logging.handlers
 
 LOG_LEVEL = logging.INFO  # Could be e.g. "INFO", "DEBUG" or "WARNING"
 
+
 # Make a class we can use to capture stdout and sterr in the log
 class MyLogger(object):
     def __init__(self, logger, level):

@@ -41,10 +41,10 @@ import settings
 humStatusTable = ["Dry", "Comfort", "Normal", "Wet"]
 
 # Global vars for the Tradfri Hub API
-api     = None
+api = None
 gateway = None
 devices = None
-lights  = None
+lights = None
 
 observers = {}
 
@@ -52,62 +52,65 @@ lightDevices = {}
 lightGroupNames = []
 
 sendQueue = Queue(maxsize=0)
-current_sec_time = lambda: int(round(time.time()))
-current_milli_time = lambda: int(round(time.time() * 1000))
 oldTimeout = 0
 
-exit = False
+exitThread = False
+
+
+def current_sec_time():
+    return int(round(time.time()))
+
+
+def current_milli_time():
+    return int(round(time.time() * 1000))
 
 
 def signal_handler(_signal, frame):
-    global exit
+    global exitThread
 
     print('You pressed Ctrl+C!')
-    exit = True
+    exitThread = True
 
 
-def observe(api, device):
+def observe(_api, device):
     def callback(updated_device):
-        light = updated_device.light_control.lights[0]
-
-        maybeGroupName = device.name[0:-2]
+        _light = updated_device.light_control.lights[0]
+        _maybeGroupName = device.name[0:-2]
         # Check if this light is in a group
         if maybeGroupName in lightGroupNames:
-            deviceName = maybeGroupName
+            devName = maybeGroupName
         else:
-            deviceName = device.name
+            devName = device.name
 
-        #print("Received message for: %s" % light)
-        deviceState = {}
-        deviceState['state'] = int(light.state)
-        deviceState['dimmer'] = light.dimmer
-        if light.color_temp is not None:
+        # print("Received message for: %s" % light)
+        deviceState = {'state': int(_light.state), 'dimmer': _light.dimmer}
+        if _light.color_temp is not None:
             # Convert Tradfri color_temp (250-454) to HASS Color range (153-500): HASS_color=(Tradfri_color-250)*(347/204)+153
-            data = int((float(light.color_temp) - 250.0) * (347.0 / 204.0) + 153.0)
+            data = int((float(_light.color_temp) - 250.0) * (347.0 / 204.0) + 153.0)
             deviceState['color_temp'] = data
-        #deviceState['supported_features'] = light.supported_features
-        #kwhMeterStatus['signal'] = signal
-        #kwhMeterStatus['battery'] = battery
-        mqtt_publish.single("huis/Tradfri/%s/rx" % deviceName.replace(' ', '-'), json.dumps(deviceState, separators=(', ', ':')), qos=1, hostname=settings.MQTT_ServerIP)
+        # deviceState['supported_features'] = _light.supported_features
+        # kwhMeterStatus['signal'] = signal
+        # kwhMeterStatus['battery'] = battery
+        mqtt_publish.single("huis/Tradfri/%s/rx" % devName.replace(' ', '-'), json.dumps(deviceState, separators=(', ', ':')), qos=1, hostname=settings.MQTT_ServerIP)
 
     def err_callback(err):
         print("Observe.err_callback:" + str(err))
 
     def worker():
-        #api(device.observe(callback, err_callback, duration=10)) # duration=10.000 days, no timeout is not possible and default is 60 sec
-        api(device.observe(callback, err_callback, duration=864000000)) # duration=10.000 days, no timeout is not possible and default is 60 sec
+        # _api(device.observe(callback, err_callback, duration=10))  # duration=10.000 days, no timeout is not possible and default is 60 sec
+        _api(device.observe(callback, err_callback, duration=864000000))  # duration=10.000 days, no timeout is not possible and default is 60 sec
 
     maybeGroupName = device.name[0:-2]
     # Check if this light is in a group
     if maybeGroupName in lightGroupNames:
-        deviceName = maybeGroupName
+        _deviceName = maybeGroupName
     else:
-        deviceName = device.name
+        _deviceName = device.name
 
     # threading.Thread(target=worker, daemon=True).start()
-    print(" - Starting observer thread for %s" % deviceName)
-    observers[deviceName] = threading.Thread(target=worker, daemon=True)
-    observers[deviceName].start()
+    print(" - Starting observer thread for %s" % _deviceName)
+    observers[_deviceName] = threading.Thread(target=worker, daemon=True)
+    observers[_deviceName].start()
 
 
 # The callback for when the client receives a CONNACK response from the server.
@@ -123,28 +126,28 @@ def on_connect(client, userdata, flags, rc):
         print(("ERROR: MQTT Client connected with result code %s " % str(rc)))
 
 
-def switchLight(deviceName, state):
+def switchLight(_deviceName, state):
     # print('setLight:' + deviceName)
 
-    cmndStr = ("%s;switch;%d" % (deviceName, state))
+    cmndStr = ("%s;switch;%d" % (_deviceName, state))
     sendQueue.put(cmndStr)
 
 
-def dimLight(deviceName, dimLevel):
+def dimLight(_deviceName, dimLevel):
     # print('dimLight:' + deviceName)
 
-    cmndStr = ("%s;brightness;%d" % (deviceName, dimLevel))
+    cmndStr = ("%s;brightness;%d" % (_deviceName, dimLevel))
     sendQueue.put(cmndStr)
 
 
-def setLightColor(deviceName, color):
+def setLightColor(_deviceName, color):
     # print('setLightColor:' + deviceName)
 
-    cmndStr = ("%s;color;%d" % (deviceName, color))
+    cmndStr = ("%s;color;%d" % (_deviceName, color))
     sendQueue.put(cmndStr)
 
 
-# The callback for when a PUBLISH message is received from the server
+# The callback for when a published message is received from the server
 def on_message(client, userdata, msg):
     print(('ERROR: Received ' + msg.topic + ' in on_message function' + str(msg.payload)))
 
@@ -153,12 +156,12 @@ def on_message_tx(client, userdata, msg):
     # print(msg.topic + " " + msg.payload.decode())
     topics = msg.topic.split("/")
     # Example topic: huis/Tradfri/Licht TVkamer/out
-    deviceName = topics[2].replace('-', ' ')
-    action = topics[3] # Like: out, bediening, brightness, color
+    _deviceName = topics[2].replace('-', ' ')
+    action = topics[3]  # Like: out, bediening, brightness, color
 
-    if deviceName[0:5] == "Licht":
-        if deviceName not in lightDevices:
-            print('MQTT_tx: %s-device not found in lightDevices' % deviceName)
+    if _deviceName[0:5] == "Licht":
+        if _deviceName not in lightDevices:
+            print('MQTT_tx: %s-device not found in lightDevices' % _deviceName)
         else:
             if action == 'tx':
                 msgData = json.loads(msg.payload.decode())
@@ -167,17 +170,17 @@ def on_message_tx(client, userdata, msg):
                 if type(msgData) is dict:
                     # Set state
                     if msgData['state'] == 0:
-                        # Switch light off, dont't need to set dimming and color
-                        switchLight(deviceName, 0)
+                        # Switch light off, don't need to set dimming and color
+                        switchLight(_deviceName, 0)
                     else:
                         # Switch light on
-                        switchLight(deviceName, 1)
+                        switchLight(_deviceName, 1)
 
                         # Set brightness (From 0 to 254)
                         data = msgData['dimmer']
                         if data > 254:
                             data = 254
-                        dimLight(deviceName, data)
+                        dimLight(_deviceName, data)
 
                         if 'color_temp' in msgData:
                             data = msgData['color_temp']
@@ -191,7 +194,7 @@ def on_message_tx(client, userdata, msg):
                                 data = 454
                             elif data < 250:
                                 data = 250
-                            setLightColor(deviceName, data)
+                            setLightColor(_deviceName, data)
             else:
                 dataStr = msg.payload.decode()
 
@@ -203,13 +206,13 @@ def on_message_tx(client, userdata, msg):
 
                 if action == 'licht':
                     if data == 1:
-                        switchLight(deviceName, 1)
+                        switchLight(_deviceName, 1)
                     else:
-                        switchLight(deviceName, 0)
+                        switchLight(_deviceName, 0)
                 elif action == 'helderheid':
                     if data > 254:
                         data = 254
-                    dimLight(deviceName, data)
+                    dimLight(_deviceName, data)
                 elif action == 'kleur':
                     # Convert color range from HASS color (153-500) to Tradfri color (250-454): Tradfri_color=(HASS_color-153)*(204/347)+250
                     data = int((float(data) - 153.0) * (204.0 / 347.0) + 250.0)
@@ -222,24 +225,27 @@ def on_message_tx(client, userdata, msg):
                     setLightColor(deviceName, data)
 
 
-def sendTradfriCommand(light, command, value):
+def sendTradfriCommand(_light, command, value):
     if command == 'switch':
         if value == '0':
-            # print('switch off:' + light.name)
-            off_command = light.light_control.set_state(False)
+            # print('switch off:' + _light.name)
+            off_command = _light.light_control.set_state(False)
         else:
-            # print('switch on:' + light.name)
-            off_command = light.light_control.set_state(True)
+            # print('switch on:' + _light.name)
+            off_command = _light.light_control.set_state(True)
+        # noinspection PyCallingNonCallable
         api(off_command)
     elif command == 'brightness':
-        dim_command = light.light_control.set_dimmer(int(value))
+        dim_command = _light.light_control.set_dimmer(int(value))
+        # noinspection PyCallingNonCallable
         api(dim_command)
     elif command == 'color':
-        #Color needs to be value between 250 (0x0FA) and 454 (0x1C6)
-        #color = 250 #cold (0xf5faf6)
-        #color = 374 #normal (0xf1e0b5)
-        #color = 454 #warm (efd275)
-        color_command = light.light_control.set_color_temp(int(value))
+        # Color needs to be value between 250 (0x0FA) and 454 (0x1C6)
+        # color = 250 #cold (0xf5faf6)
+        # color = 374 #normal (0xf1e0b5)
+        # color = 454 #warm (efd275)
+        color_command = _light.light_control.set_color_temp(int(value))
+        # noinspection PyCallingNonCallable
         api(color_command)
     else:
         print('%s: Unknown Tradfri command' % command)
@@ -257,24 +263,24 @@ def commandThread():
                 # print("SendMsg: " + str(cmndStr))
                 cmnd = cmndStr.split(';')
 
-                #cmndStr = ("%s;%d;%s;%s" % (unit, state, dimLevel, color))
+                # cmndStr = ("%s;%d;%s;%s" % (unit, state, dimLevel, color))
                 # print(cmnd)
-                deviceName = cmnd[0]
+                _deviceName = cmnd[0]
                 command = cmnd[1]
                 value = cmnd[2]
 
-                if deviceName in lightDevices:
-                    #print("Light: " + deviceName)
+                if _deviceName in lightDevices:
+                    # print("Light: " + _deviceName)
                     # If a deviceName contains more lights, send the command
                     # to all lightDevices for this deviceName
-                    for singleLight in lightDevices[deviceName]:
+                    for singleLight in lightDevices[_deviceName]:
                         sendTradfriCommand(singleLight, command, value)
                         # print("   - " + singleLight.name)
             serviceReport.systemWatchTimer = current_sec_time()
 
         # In case the message contains unusual data
-        except ValueError as arg:
-            print(arg)
+        except ValueError as _arg:
+            print(_arg)
             traceback.print_exc()
             time.sleep(1)
 
@@ -284,8 +290,8 @@ def commandThread():
             exit()
 
         # Handle other exceptions and print the error
-        except Exception as arg:
-            print("sendTradfriCommand %s" % str(arg))
+        except Exception as _arg:
+            print("sendTradfriCommand %s" % str(_arg))
             time.sleep(1)
 
 
@@ -388,11 +394,11 @@ def initTradfriGatewayAPI():
         lightGroupNames.append(g.name)
         print("Create light group:" + g.name)
 
-    #print("Found light devices:")
-    for light in lights:
-        print("- " + light.name + ' id: ' + str(light.id))
+    # print("Found light devices:")
+    for _light in lights:
+        print("- " + _light.name + ' id: ' + str(_light.id))
 
-        maybeGroupName = light.name[0:-2]
+        maybeGroupName = _light.name[0:-2]
         # Check if this light is in a group
         if maybeGroupName in lightGroupNames:
             # Put this light in a lichtDevice as a group
@@ -400,12 +406,12 @@ def initTradfriGatewayAPI():
                 print("Make new group: " + maybeGroupName)
                 lightDevices[maybeGroupName] = []
 
-            print("Add " + light.name + " to group: " + maybeGroupName)
-            lightDevices[maybeGroupName].append(light)
+            print("Add " + _light.name + " to group: " + maybeGroupName)
+            lightDevices[maybeGroupName].append(_light)
         else:
-            print(light.name + " is a separate light")
-            lightDevices[light.name] = []
-            lightDevices[light.name].append(light)
+            print(_light.name + " is a separate light")
+            lightDevices[_light.name] = []
+            lightDevices[_light.name].append(_light)
 
 #
 # monitor the device list and give instructions
@@ -423,12 +429,12 @@ def initTradfriGatewayAPI():
     #     if groupName in lightDeviceNames[groupName + ' 1']:
     #         # There are more than 1 lights in the group
     #         for id in g.member_ids:
-    #             for light in lights:
-    #                 if id == light.id:
-    #                     lightGroups[groupName].append(light)
-    #                     print("- " + light.name + ' id: ' + str(light.id))
+    #             for _light in lights:
+    #                 if id == _light.id:
+    #                     lightGroups[groupName].append(_light)
+    #                     print("- " + _light.name + ' id: ' + str(_light.id))
     #     else:
-    #         # Put only one light device in the groups, the will be controlled separately
+    #         # Put only one light device in the groups, they will be controlled separately
     #         pass
 
     # print(g.name, g.member_ids, g.state, g.dimmer)
@@ -472,10 +478,10 @@ for deviceName in lightDevices:
     # print('Sleeping to start observation task')
     time.sleep(1)
 
-while not exit:
+while not exitThread:
     time.sleep(2)  # 60s
 
-    if not exit:
+    if not exitThread:
         # Check observers
         for deviceName in observers:
             if not observers[deviceName].is_alive():
