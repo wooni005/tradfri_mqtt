@@ -83,7 +83,7 @@ def observe(_api, device):
             devName = device.name
 
         # print("Received message for: %s" % light)
-        deviceState = {'state': int(_light.state), 'dimmer': _light.dimmer}
+        deviceState = {'state': int(_light.state), 'brightness': _light.dimmer}
         if _light.color_temp is not None:
             # Convert Tradfri color_temp (250-454) to HASS Color range (153-500): HASS_color=(Tradfri_color-250)*(347/204)+153
             data = int((float(_light.color_temp) - 250.0) * (347.0 / 204.0) + 153.0)
@@ -177,7 +177,7 @@ def on_message_tx(client, userdata, msg):
                         switchLight(_deviceName, 1)
 
                         # Set brightness (From 0 to 254)
-                        data = msgData['dimmer']
+                        data = msgData['brightness']
                         if data > 254:
                             data = 254
                         dimLight(_deviceName, data)
